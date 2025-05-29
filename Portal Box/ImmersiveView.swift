@@ -37,8 +37,7 @@ struct ImmersiveView: View {
     
     var body: some View {
         RealityView {
- content,
- attachments in
+            content in
             // Add the initial RealityKit content
             if let scene = try? await Entity(named: "PortalBoxScene", in: realityKitContentBundle) {
                 content.add(scene)
@@ -106,15 +105,6 @@ struct ImmersiveView: View {
                 )
                 world4Portal.transform.rotation = simd_quatf(angle: .pi/2, axis: [-1, 0, 0])
                 self.world4 = world4
-                
-                if let attachment = attachments.entity(for: "HeadPose") {
-                    attachment.position = [0, 0, 1]
-                    box.addChild(attachment)
-                }
-            }
-        } attachments: {
-            Attachment(id: "HeadPose") {
-                Text("Head Pose Label: \(headDirection)")
             }
         }
         .onAppear {
@@ -123,8 +113,7 @@ struct ImmersiveView: View {
             }
             
             timerCancellable = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect().sink { _ in
-                let headPose = getHeadPose()
-                getHeadDirection(headPose)
+                updateHeadDirection()
             }
         }
         .onDisappear {
@@ -132,25 +121,16 @@ struct ImmersiveView: View {
         }
         .onChange(of: headDirection) {
             switch headDirection {
+            case .left:
+                currentWorld = world1
+            case .right:
+                currentWorld = world2
             case .forward:
                 currentWorld = world3
-                print("Looking forward - World 3 activated")
-                // You can add visual feedback or transition effects here
             case .backward:
-                // Optional: set world 3 as current when looking backward
                 currentWorld = world4
-                print("Looking backward - World 4 activated!")
-            case .left:
-                // Optional: set world 4 as current when looking left
-                currentWorld = world1
-                print("Looking left - World 1 activated!")
-            case .right:
-                // Optional: set world 2 as current when looking right
-                currentWorld = world2
-                print("Looking right - World 2 activated!")
             case .unknown:
                 currentWorld = nil
-                print("Head direction unknown")
             }
         }
         .onChange(of: currentWorld) { oldWorld, newWorld in
@@ -161,7 +141,6 @@ struct ImmersiveView: View {
                 setEmitterState(forWorld: newWorld, state: .play)
             }
         }
-        
     }
     
     func setEmitterState(forWorld world: Entity, state: ParticleEmitterComponent.SimulationState) {
@@ -169,7 +148,6 @@ struct ImmersiveView: View {
         var emitterComp = emitter.components[ParticleEmitterComponent.self]!
         emitterComp.simulationState = state
         emitter.components.set(emitterComp)
-        print("world set to \(state)")
     }
     
     func getHeadPose() -> simd_float4x4 {
@@ -179,22 +157,21 @@ struct ImmersiveView: View {
         return device.originFromAnchorTransform
     }
     
-    func getHeadDirection(_ headPose: simd_float4x4) {
+    func updateHeadDirection() {
+        let headPose = getHeadPose()
         let forward = -SIMD3<Float>(headPose.columns.2.x,
                                     headPose.columns.2.y,
                                     headPose.columns.2.z)
-        let threshold: Float = 0.25
-        let backThreshold: Float = 0.75
+        let threshold: Float = sqrt(2.0) / 2  // ≈ 0.7071
+
         if forward.x < -threshold {
             headDirection = .left
         } else if forward.x > threshold {
             headDirection = .right
+        } else if forward.z > threshold {
+            headDirection = .backward
         } else {
-            if forward.z > backThreshold {
-                headDirection = .backward
-            } else {
-                headDirection = .forward
-            }
+            headDirection = .forward
         }
     }
     
@@ -209,7 +186,7 @@ struct ImmersiveView: View {
                 fatalError("Cannot find particle emitter")
             }
             var emitterComp = emitter.components[ParticleEmitterComponent.self]!
-            emitterComp.simulationState = .pause
+            emitterComp.simulationState = particleWorldName == "World3Scene" ? .play : .pause
             emitter.components.set(emitterComp)
             world.addChild(particleWorld)
         }
@@ -254,8 +231,3 @@ struct ImmersiveView: View {
         return entity
     }
 }
-
-//#Preview(immersionStyle: .mixed) {
-//    ImmersiveView()
-//        .environment(AppModel())
-//}
