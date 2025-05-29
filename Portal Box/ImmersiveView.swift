@@ -32,12 +32,17 @@ struct ImmersiveView: View {
     @State private var world3: Entity? = nil
     @State private var world4: Entity? = nil
     
+    @State private var puck: Entity = Entity()
+    @State private var boxToPuckOffset: SIMD3<Float> = [0, 0, 0]
+    
     private let session = ARKitSession()
     private let provider = WorldTrackingProvider()
     
+    let PUCK_DISTANCE: SIMD3<Float> = [0, 0.75, -1.45]
+    
     var body: some View {
         RealityView {
-            content in
+            content, attachments in
             // Add the initial RealityKit content
             if let scene = try? await Entity(named: "PortalBoxScene", in: realityKitContentBundle) {
                 content.add(scene)
@@ -48,12 +53,7 @@ struct ImmersiveView: View {
                 }
                 self.box = box
                 box.position = [0, 1, -2] // meters
-                box.scale *= [1,2,1] // make taller
-                box.components.set(InputTargetComponent())
-                box.components
-                    .set(CollisionComponent(
-                        shapes: [.generateBox(size: [1,2,1])]
-                    ))
+                box.scale *= [1,0.5,1] // make taller
                 
                 let world1 = await createWorld(
                     texture: "skybox1",
@@ -110,6 +110,25 @@ struct ImmersiveView: View {
                 )
                 world4Portal.transform.rotation = simd_quatf(angle: .pi/2, axis: [-1, 0, 0])
                 self.world4 = world4
+
+                if let attachment = attachments.entity(for: "MovePuck") {
+                    attachment.position = PUCK_DISTANCE // meters
+                    attachment.components.set(InputTargetComponent())
+                    attachment.components
+                        .set(CollisionComponent(
+                            shapes: [.generateBox(size: [0.1,0.05,0.0])]
+                        ))
+                    puck = attachment
+                    scene.addChild(attachment)
+                    self.boxToPuckOffset = box.position - puck.position
+                }
+            }
+        } attachments: {
+            Attachment(id: "MovePuck") {
+                Rectangle()
+                    .fill(Color.gray)
+                    .frame(width: 100, height: 25)
+                    .cornerRadius(20)
             }
         }
         .onAppear {
@@ -148,9 +167,13 @@ struct ImmersiveView: View {
         }
         .gesture(
             DragGesture()
-                .targetedToEntity(box)
+                .targetedToEntity(puck)
                 .onChanged { value in
-                    box.position = value.convert(value.location3D, from: .local, to: box.parent!)
+                    let worldPosition = value.convert(value.location3D, from: .local, to: puck.parent!)
+                    puck.position = worldPosition
+                    
+                    // Apply the original offset to maintain the relative positioning
+                    box.position = worldPosition + boxToPuckOffset
                 }
         )
     }
