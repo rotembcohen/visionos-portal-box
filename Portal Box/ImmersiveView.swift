@@ -49,6 +49,11 @@ struct ImmersiveView: View {
                 self.box = box
                 box.position = [0, 1, -2] // meters
                 box.scale *= [1,2,1] // make taller
+                box.components.set(InputTargetComponent())
+                box.components
+                    .set(CollisionComponent(
+                        shapes: [.generateBox(size: [1,2,1])]
+                    ))
                 
                 let world1 = await createWorld(
                     texture: "skybox1",
@@ -141,6 +146,13 @@ struct ImmersiveView: View {
                 setEmitterState(forWorld: newWorld, state: .play)
             }
         }
+        .gesture(
+            DragGesture()
+                .targetedToEntity(box)
+                .onChanged { value in
+                    box.position = value.convert(value.location3D, from: .local, to: box.parent!)
+                }
+        )
     }
     
     func setEmitterState(forWorld world: Entity, state: ParticleEmitterComponent.SimulationState) {
@@ -163,7 +175,7 @@ struct ImmersiveView: View {
                                     headPose.columns.2.y,
                                     headPose.columns.2.z)
         let threshold: Float = sqrt(2.0) / 2  // ≈ 0.7071
-
+        
         if forward.x < -threshold {
             headDirection = .left
         } else if forward.x > threshold {
